@@ -1,0 +1,20 @@
+{
+  "usuarios": [
+    {
+      "id": 1,
+      "nome": "João",
+      "email": "joao@email.com",
+      "senha": "1234",
+      "tipo": "comprador",
+      "saldo": 100
+    },
+    {
+      "id": 2,
+      "nome": "Maria",
+      "email": "maria@email.com",
+      "senha": "1234",
+      "tipo": "vendedor",
+      "saldo": 0
+    }
+  ]
+}
