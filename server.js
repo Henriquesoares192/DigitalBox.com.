@@ -1,113 +1,215 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
+const basicAuth = require('express-basic-auth');
+const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const basicAuth = require('express-basic-auth');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = 3000;
 
+// JWT secret
+const JWT_SECRET = 'sua_chave_secreta_jwt_aqui';
+
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const pedidosFile = path.join(__dirname, 'data', 'pedidos.json');
-const usuariosFile = path.join(__dirname, 'data', 'usuarios.json');
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 
-function lerJson(file) {
+const usersFile = path.join(dataDir, 'users.json');
+const productsFile = path.join(dataDir, 'products.json');
+const ordersFile = path.join(dataDir, 'orders.json');
+
+function readJson(file) {
   if (!fs.existsSync(file)) return [];
-  const data = fs.readFileSync(file);
-  return JSON.parse(data);
+  return JSON.parse(fs.readFileSync(file));
 }
 
-function salvarJson(file, data) {
+function saveJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
-// Hash bcrypt da senha super secreta que você passou
-const senhaAdminHash = '$2b$10$/1XxBftji7DY5hG4XBl9teAYUKmf.7R1X4jUoV7K7G0g4Jh9jTvkq';
+// Admin Basic Auth
+const adminPasswordHash = '$2b$10$/1XxBftji7DY5hG4XBl9teAYUKmf.7R1X4jUoV7K7G0g4Jh9jTvkq'; // Sua senha criptografada
 
 app.use('/admin', basicAuth({
   authorizer: (username, password) => {
-    if (username === 'admin') {
-      return bcrypt.compareSync(password, senhaAdminHash);
+    if(username === 'admin'){
+      return bcrypt.compareSync(password, adminPasswordHash);
     }
     return false;
   },
-  authorizeAsync: false,
   unauthorizedResponse: () => 'Não autorizado'
 }));
 
-// Rota admin para listar pedidos
-app.get('/admin/pedidos', (req, res) => {
-  const pedidos = lerJson(pedidosFile);
-  res.json(pedidos);
+// Rotas Admin protegidas
+app.get('/admin/users', (req, res) => {
+  const users = readJson(usersFile);
+  res.json(users);
 });
 
-// Aprovar pedido e adicionar moedas ao usuário
-app.post('/admin/pedidos/:id/aprovar', (req, res) => {
-  const pedidos = lerJson(pedidosFile);
-  const usuarios = lerJson(usuariosFile);
-  const id = parseInt(req.params.id);
-  const pedido = pedidos.find(p => p.id === id);
-  if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
-  if (pedido.status === 'aprovado') return res.status(400).json({ error: 'Pedido já aprovado' });
-
-  pedido.status = 'aprovado';
-  salvarJson(pedidosFile, pedidos);
-
-  let usuario = usuarios.find(u => u.email === pedido.email);
-  if (!usuario) {
-    usuario = { email: pedido.email, nome: pedido.nome, saldo: 0 };
-    usuarios.push(usuario);
-  }
-  usuario.saldo = (usuario.saldo || 0) + pedido.quantidadeMoedas;
-  salvarJson(usuariosFile, usuarios);
-
-  res.json({ message: 'Pedido aprovado e moedas adicionadas' });
+app.get('/admin/products', (req, res) => {
+  const products = readJson(productsFile);
+  res.json(products);
 });
 
-// Receber pedido de compra (frontend envia aqui)
-app.post('/pedidos', (req, res) => {
-  const pedidos = lerJson(pedidosFile);
-  const { nome, email, comprovante, quantidadeMoedas } = req.body;
-  if (!nome || !email || !quantidadeMoedas) return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+// API para cadastro de usuário (vendedor ou comprador)
+app.post('/api/register', async (req, res) => {
+  const { email, nome, senha, tipo } = req.body;
+  if (!email || !nome || !senha || !tipo) return res.status(400).json({ error: 'Campos obrigatórios' });
+  if (!['vendedor', 'comprador'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' });
 
-  const novoPedido = {
-    id: pedidos.length ? pedidos[pedidos.length - 1].id + 1 : 1,
+  let users = readJson(usersFile);
+  if(users.find(u => u.email === email)) return res.status(400).json({ error: 'E-mail já cadastrado' });
+
+  const hash = await bcrypt.hash(senha, 10);
+  const novoUser = { id: Date.now(), email, nome, senha: hash, tipo, saldo: 0 };
+  users.push(novoUser);
+  saveJson(usersFile, users);
+  res.json({ message: 'Usuário cadastrado com sucesso' });
+});
+
+// API login retorna token JWT
+app.post('/api/login', async (req, res) => {
+  const { email, senha } = req.body;
+  if(!email || !senha) return res.status(400).json({ error: 'Campos obrigatórios' });
+
+  let users = readJson(usersFile);
+  const user = users.find(u => u.email === email);
+  if(!user) return res.status(400).json({ error: 'Usuário não encontrado' });
+
+  const valid = await bcrypt.compare(senha, user.senha);
+  if(!valid) return res.status(400).json({ error: 'Senha incorreta' });
+
+  const token = jwt.sign({ id: user.id, email: user.email, tipo: user.tipo }, JWT_SECRET, { expiresIn: '8h' });
+  res.json({ token, nome: user.nome, tipo: user.tipo });
+});
+
+// Middleware para autenticar JWT
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if(!authHeader) return res.status(401).json({ error: 'Token não fornecido' });
+  const token = authHeader.split(' ')[1];
+  if(!token) return res.status(401).json({ error: 'Token inválido' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if(err) return res.status(403).json({ error: 'Token expirado ou inválido' });
+    req.user = user;
+    next();
+  });
+}
+
+// Rota para vendedor criar produto
+app.post('/api/produtos', authMiddleware, (req, res) => {
+  const { nome, imagem, preco } = req.body;
+  if(!nome || !imagem || preco == null) return res.status(400).json({ error: 'Campos obrigatórios' });
+
+  // Só vendedor pode criar produto
+  if(req.user.tipo !== 'vendedor') return res.status(403).json({ error: 'Acesso negado' });
+
+  const products = readJson(productsFile);
+  const novoProduto = {
+    id: Date.now(),
     nome,
-    email,
-    comprovante: comprovante || '',
-    quantidadeMoedas,
-    status: 'pendente',
-    data: new Date().toISOString()
+    imagem,
+    preco,
+    vendedorId: req.user.id
   };
-  pedidos.push(novoPedido);
-  salvarJson(pedidosFile, pedidos);
-  res.json({ message: 'Pedido enviado com sucesso' });
+  products.push(novoProduto);
+  saveJson(productsFile, products);
+  res.json({ message: 'Produto criado com sucesso', produto: novoProduto });
 });
 
-// Consultar saldo do usuário
-app.get('/saldo/:email', (req, res) => {
-  const usuarios = lerJson(usuariosFile);
-  const email = req.params.email;
-  const usuario = usuarios.find(u => u.email === email);
-  res.json({ saldo: usuario ? usuario.saldo : 0 });
+// Rota para listar produtos (qualquer usuário)
+app.get('/api/produtos', (req, res) => {
+  const products = readJson(productsFile);
+  res.json(products);
 });
 
-// Comprar produto descontando saldo
-app.post('/comprar', (req, res) => {
-  const usuarios = lerJson(usuariosFile);
-  const { email, preco } = req.body;
-  if (!email || preco == null) return res.status(400).json({ error: 'Dados incompletos' });
-  let usuario = usuarios.find(u => u.email === email);
-  if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado' });
-  if (usuario.saldo < preco) return res.status(400).json({ error: 'Saldo insuficiente' });
-  usuario.saldo -= preco;
-  salvarJson(usuariosFile, usuarios);
-  res.json({ message: 'Compra realizada', saldo: usuario.saldo });
+// Rota para comprador fazer pedido (comprar produto)
+app.post('/api/comprar', authMiddleware, (req, res) => {
+  if(req.user.tipo !== 'comprador') return res.status(403).json({ error: 'Acesso negado' });
+
+  const { produtoId } = req.body;
+  if(!produtoId) return res.status(400).json({ error: 'Produto obrigatório' });
+
+  let users = readJson(usersFile);
+  let products = readJson(productsFile);
+  let orders = readJson(ordersFile);
+
+  const user = users.find(u => u.id === req.user.id);
+  const produto = products.find(p => p.id === produtoId);
+  if(!produto) return res.status(404).json({ error: 'Produto não encontrado' });
+
+  if(user.saldo < produto.preco) return res.status(400).json({ error: 'Saldo insuficiente' });
+
+  user.saldo -= produto.preco;
+  orders.push({
+    id: Date.now(),
+    compradorId: user.id,
+    produtoId: produto.id,
+    data: new Date().toISOString()
+  });
+
+  saveJson(usersFile, users);
+  saveJson(ordersFile, orders);
+
+  res.json({ message: 'Compra realizada com sucesso', saldoRestante: user.saldo });
+});
+
+// Rota para vendedor listar seus produtos
+app.get('/api/produtos/meus', authMiddleware, (req, res) => {
+  if(req.user.tipo !== 'vendedor') return res.status(403).json({ error: 'Acesso negado' });
+  const products = readJson(productsFile);
+  const meus = products.filter(p => p.vendedorId === req.user.id);
+  res.json(meus);
+});
+
+// Rota para vendedor deletar produto seu
+app.delete('/api/produtos/:id', authMiddleware, (req, res) => {
+  if(req.user.tipo !== 'vendedor') return res.status(403).json({ error: 'Acesso negado' });
+  const id = parseInt(req.params.id);
+  let products = readJson(productsFile);
+  const index = products.findIndex(p => p.id === id && p.vendedorId === req.user.id);
+  if(index === -1) return res.status(404).json({ error: 'Produto não encontrado ou sem permissão' });
+  products.splice(index, 1);
+  saveJson(productsFile, products);
+  res.json({ message: 'Produto deletado' });
+});
+
+// Rota para usuário ver saldo
+app.get('/api/saldo', authMiddleware, (req, res) => {
+  let users = readJson(usersFile);
+  const user = users.find(u => u.id === req.user.id);
+  if(!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  res.json({ saldo: user.saldo });
+});
+
+// Admin: rota para listar usuários
+app.get('/admin/usuarios', (req, res) => {
+  const users = readJson(usersFile);
+  res.json(users);
+});
+
+// Admin: rota para adicionar saldo a usuário
+app.post('/admin/usuarios/:id/saldo', (req, res) => {
+  const id = parseInt(req.params.id);
+  const { quantidade } = req.body;
+  if(!quantidade || quantidade <= 0) return res.status(400).json({ error: 'Quantidade inválida' });
+
+  let users = readJson(usersFile);
+  const user = users.find(u => u.id === id);
+  if(!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+  user.saldo = (user.saldo || 0) + quantidade;
+  saveJson(usersFile, users);
+  res.json({ message: 'Saldo atualizado', saldo: user.saldo });
 });
 
 app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
