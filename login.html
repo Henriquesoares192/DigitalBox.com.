@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Login - DigitalBox</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>Login</h1>
+    <form id="formLogin">
+      <label>Email:<br />
+        <input type="email" id="email" required />
+      </label><br />
+      <label>Senha:<br />
+        <input type="password" id="senha" required />
+      </label><br />
+      <button type="submit">Entrar</button>
+    </form>
+    <p><a href="register.html">Não tem conta? Cadastre-se</a></p>
+    <div id="msg"></div>
+  </main>
+<script>
+  const form = document.getElementById('formLogin');
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const email = document.getElementById('email').value.trim();
+    const senha = document.getElementById('senha').value;
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, senha })
+    });
+    const data = await res.json();
+    const msg = document.getElementById('msg');
+    if (res.ok) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('nome', data.nome);
+      localStorage.setItem('tipo', data.tipo);
+      localStorage.setItem('saldo', data.saldo);
+      msg.style.color = 'green';
+      msg.textContent = 'Login efetuado com sucesso!';
+      setTimeout(() => {
+        if (data.tipo === 'vendedor') window.location.href = 'vendedor.html';
+        else if (data.tipo === 'comprador') window.location.href = 'comprador.html';
+        else window.location.href = 'index.html';
+      }, 1500);
+    } else {
+      msg.style.color = 'red';
+      msg.textContent = data.error || 'Erro no login';
+    }
+  });
+</script>
+</body>
+</html>
