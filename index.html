@@ -1,18 +1,129 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DigitalBox - Início</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Painel Comprador - DigitalBox</title>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main>
-    <h1>Bem-vindo ao DigitalBox</h1>
-    <div class="buttons">
-      <a href="login.html" class="btn">Login</a>
-      <a href="register.html" class="btn">Cadastro</a>
-    </div>
+    <h1>Painel Comprador</h1>
+    <p>Bem-vindo, <span id="nomeUser"></span>! Saldo: <span id="saldoUser"></span> moedas</p>
+    <button id="btnLogout">Sair</button>
+
+    <section>
+      <h2>Comprar Moedas (Pix)</h2>
+      <p>Escaneie o QR Code Pix abaixo para pagar:</p>
+      <img src="qrcode-pix.png" alt="QR Code Pix" width="200" />
+
+      <form id="formCompraPix">
+        <label for="nome">Nome:</label><br/>
+        <input type="text" id="nome" name="nome" required /><br/><br/>
+
+        <label for="email">E-mail:</label><br/>
+        <input type="email" id="email" name="email" required /><br/><br/>
+
+        <label for="comprovante">Comprovante (imagem):</label><br/>
+        <input type="file" id="comprovante" name="comprovante" accept="image/*" required /><br/><br/>
+
+        <button type="submit">Enviar Pedido de Compra</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Histórico de Pedidos</h2>
+      <ul id="listaPedidos"></ul>
+    </section>
   </main>
+
+  <script>
+    // Simulação: busca nome e saldo do usuário do LocalStorage (ou autenticação real)
+    const nomeUserSpan = document.getElementById('nomeUser');
+    const saldoUserSpan = document.getElementById('saldoUser');
+    const btnLogout = document.getElementById('btnLogout');
+    const formCompraPix = document.getElementById('formCompraPix');
+    const listaPedidos = document.getElementById('listaPedidos');
+
+    // Exemplo: usuario salvo no localStorage
+    const usuario = JSON.parse(localStorage.getItem('usuarioLogado'));
+    if (!usuario) {
+      alert('Usuário não logado! Faça login.');
+      window.location.href = 'login.html';
+    } else {
+      nomeUserSpan.textContent = usuario.nome;
+      saldoUserSpan.textContent = usuario.saldo || 0;
+    }
+
+    btnLogout.onclick = () => {
+      localStorage.removeItem('usuarioLogado');
+      window.location.href = 'login.html';
+    };
+
+    // Submeter pedido de compra Pix
+    formCompraPix.onsubmit = async (e) => {
+      e.preventDefault();
+
+      const nome = formCompraPix.nome.value.trim();
+      const email = formCompraPix.email.value.trim();
+      const comprovanteFile = formCompraPix.comprovante.files[0];
+
+      if (!nome || !email || !comprovanteFile) {
+        alert('Preencha todos os campos e envie o comprovante.');
+        return;
+      }
+
+      // Criar FormData para enviar arquivo via fetch POST
+      const formData = new FormData();
+      formData.append('nome', nome);
+      formData.append('email', email);
+      formData.append('usuarioId', usuario.id); // supondo id no usuário
+      formData.append('comprovante', comprovanteFile);
+
+      try {
+        const res = await fetch('http://localhost:3000/api/pix-order', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert('Pedido de compra enviado com sucesso! Aguarde aprovação.');
+          formCompraPix.reset();
+          carregarPedidos();
+        } else {
+          alert('Erro: ' + data.message);
+        }
+      } catch (error) {
+        alert('Erro ao enviar pedido: ' + error.message);
+      }
+    };
+
+    // Carregar pedidos do usuário (simulação local)
+    async function carregarPedidos() {
+      try {
+        const res = await fetch(`http://localhost:3000/api/pix-orders?usuarioId=${usuario.id}`);
+        if (res.ok) {
+          const pedidos = await res.json();
+          listaPedidos.innerHTML = '';
+          if (pedidos.length === 0) {
+            listaPedidos.innerHTML = '<li>Nenhum pedido feito ainda.</li>';
+            return;
+          }
+          pedidos.forEach(pedido => {
+            const li = document.createElement('li');
+            li.textContent = `Pedido em ${new Date(pedido.data).toLocaleString()} - Status: ${pedido.status}`;
+            listaPedidos.appendChild(li);
+          });
+        } else {
+          listaPedidos.innerHTML = '<li>Erro ao carregar pedidos.</li>';
+        }
+      } catch {
+        listaPedidos.innerHTML = '<li>Erro na conexão com o servidor.</li>';
+      }
+    }
+
+    carregarPedidos();
+  </script>
 </body>
 </html>
