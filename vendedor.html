@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Painel Vendedor - DigitalBox</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>Painel Vendedor</h1>
+    <p>Bem-vindo, <span id="nomeUser"></span>!</p>
+    <button id="btnLogout">Sair</button>
+
+    <section>
+      <h2>Cadastrar Produto</h2>
+      <form id="formProduto">
+        <label>Nome:<br />
+          <input type="text" id="nomeProduto" required />
+        </label><br />
+        <label>Imagem (URL):<br />
+          <input type="url" id="imagemProduto" required />
+        </label><br />
+        <label>Preço (moedas):<br />
+          <input type="number" id="precoProduto" min="1" required />
+        </label><br />
+        <button type="submit">Cadastrar Produto</button>
+      </form>
+      <div id="msgProduto"></div>
+    </section>
+
+    <section>
+      <h2>Meus Produtos</h2>
+      <ul id="listaProdutos"></ul>
+    </section>
+  </main>
+
+<script>
+  const token = localStorage.getItem('token');
+  const nomeUser = localStorage.getItem('nome');
+  const tipo = localStorage.getItem('tipo');
+  if (!token || tipo !== 'vendedor') window.location.href = 'login.html';
+  document.getElementById('nomeUser').textContent = nomeUser;
+
+  document.getElementById('btnLogout').addEventListener('click', () => {
+    localStorage.clear();
+    window.location.href = 'index.html';
+  });
+
+  async function carregarProdutos() {
+    const res = await fetch('/api/produtos/meus', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await res.json();
+    const lista = document.getElementById('listaProdutos');
+    lista.innerHTML = '';
+    if (res.ok) {
+      data.forEach(prod => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <img src="${prod.imagem}" alt="${prod.nome}" width="60" style="vertical-align: middle; margin-right: 10px;" />
+          <strong>${prod.nome}</strong> - ${prod.preco} moedas 
+          <button data-id="${prod.id}" class="btnDel">Excluir</button>
+        `;
+        lista.appendChild(li);
+      });
+
+      document.querySelectorAll('.btnDel').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          if (confirm('Excluir produto?')) {
+            const resDel = await fetch('/api/produtos/' + id, {
+              method: 'DELETE',
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (resDel.ok) {
+              carregarProdutos();
+            } else {
+              alert('Erro ao excluir');
+            }
+          }
+        });
+      });
+    } else {
+      lista.textContent = 'Erro ao carregar produtos';
+    }
+  }
+
+  document.getElementById('formProduto').addEventListener('submit', async e => {
+    e.preventDefault();
+    const nomeProduto = document.getElementById('nomeProduto').value.trim();
+    const imagemProduto = document.getElementById('imagemProduto').value.trim();
+    const precoProduto = parseInt(document.getElementById('precoProduto').value);
+    const msgProduto = document.getElementById('msgProduto');
+
+    const res = await fetch('/api/produtos', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ nome: nomeProduto, imagem: imagemProduto, preco: precoProduto })
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      msgProduto.style.color = 'green';
+      msgProduto.textContent = data.message;
+      e.target.reset();
+      carregarProdutos();
+    } else {
+      msgProduto.style.color = 'red';
+      msgProduto.textContent = data.error || 'Erro ao cadastrar produto';
+    }
+  });
+
+  carregarProdutos();
+</script>
+</body>
+</html>
