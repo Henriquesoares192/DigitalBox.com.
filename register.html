@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cadastro - DigitalBox</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>Cadastro</h1>
+    <form id="formCadastro">
+      <label>Nome:<br />
+        <input type="text" id="nome" required />
+      </label><br />
+      <label>Email:<br />
+        <input type="email" id="email" required />
+      </label><br />
+      <label>Senha:<br />
+        <input type="password" id="senha" required />
+      </label><br />
+      <label>Tipo:<br />
+        <select id="tipo" required>
+          <option value="">Selecione</option>
+          <option value="comprador">Comprador</option>
+          <option value="vendedor">Vendedor</option>
+        </select>
+      </label><br />
+      <button type="submit">Cadastrar</button>
+    </form>
+    <p><a href="login.html">Já tem conta? Faça login</a></p>
+    <div id="msg"></div>
+  </main>
+<script>
+  const form = document.getElementById('formCadastro');
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const nome = document.getElementById('nome').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const senha = document.getElementById('senha').value;
+    const tipo = document.getElementById('tipo').value;
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, email, senha, tipo })
+    });
+    const data = await res.json();
+    const msg = document.getElementById('msg');
+    if (res.ok) {
+      msg.style.color = 'green';
+      msg.textContent = data.message;
+      setTimeout(() => { window.location.href = 'login.html'; }, 2000);
+    } else {
+      msg.style.color = 'red';
+      msg.textContent = data.error || 'Erro no cadastro';
+    }
+  });
+</script>
+</body>
+</html>
