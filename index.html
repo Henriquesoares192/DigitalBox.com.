@@ -3,45 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DigitalBox - Marketplace</title>
+  <title>DigitalBox - Início</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-<header>
-  <h1>DigitalBox - Marketplace</h1>
-</header>
-
-<main>
-  <section id="moedas-section">
-    <h2>Comprar moedas via Pix</h2>
-    <form id="form-pedido">
-      <label for="nome">Nome completo:</label>
-      <input type="text" id="nome" required />
-
-      <label for="email">E-mail:</label>
-      <input type="email" id="email" required />
-
-      <label for="comprovante">Comprovante Pix (URL ou texto):</label>
-      <textarea id="comprovante"></textarea>
-
-      <label for="quantidade">Quantidade de moedas:</label>
-      <input type="number" id="quantidade" min="1" value="10" required />
-
-      <button type="submit">Enviar pedido</button>
-    </form>
-    <div id="msg-pedido"></div>
-  </section>
-
-  <section id="saldo-section" style="margin-top: 30px;">
-    <h2>Saldo de moedas</h2>
-    <input type="email" id="email-saldo" placeholder="Digite seu e-mail" />
-    <button id="btn-ver-saldo">Ver saldo</button>
-    <p id="saldo"></p>
-  </section>
-</main>
-
-<script src="script.js"></script>
-
+  <main>
+    <h1>Bem-vindo ao DigitalBox</h1>
+    <div class="buttons">
+      <a href="login.html" class="btn">Login</a>
+      <a href="register.html" class="btn">Cadastro</a>
+    </div>
+  </main>
 </body>
 </html>
